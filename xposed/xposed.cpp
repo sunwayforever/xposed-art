@@ -198,53 +198,6 @@ namespace android {
             env->ExceptionClear();
             return false;
         }
-
-        ArtMethod* xposedInvokeOriginalMethodNative = (ArtMethod*) env->GetStaticMethodID(xposedClass, "invokeOriginalMethodNative",
-                                                                                         "(Ljava/lang/reflect/Member;[Ljava/lang/Class;Ljava/lang/Class;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
-        if (xposedInvokeOriginalMethodNative == NULL) {
-            ALOGE("ERROR: could not find method %s.invokeOriginalMethodNative(Member, Class[], Class, Object, Object[])\n", XPOSED_CLASS);
-            env->ExceptionClear();
-            return false;
-        }
-        // fixme
-        // dvmSetNativeFunc(xposedInvokeOriginalMethodNative, de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative, NULL);
-
-        // objectArrayClass = dvmFindArrayClass("[Ljava/lang/Object;", NULL);
-        // if (objectArrayClass == NULL) {
-        //     ALOGE("Error while loading Object[] class");
-        //     env->ExceptionClear();
-        //     return false;
-        // }
-
-        // xresourcesClass = env->FindClass(XRESOURCES_CLASS);
-        // xresourcesClass = reinterpret_cast<jclass>(env->NewGlobalRef(xresourcesClass));
-        // if (xresourcesClass == NULL) {
-        //     ALOGE("Error while loading XResources class '%s':\n", XRESOURCES_CLASS);
-        //     env->ExceptionClear();
-        //     return false;
-        // }
-        // if (register_android_content_res_XResources(env) != JNI_OK) {
-        //     ALOGE("Could not register natives for '%s'\n", XRESOURCES_CLASS);
-        //     env->ExceptionClear();
-        //     return false;
-        // }
-
-        // xresourcesTranslateResId = env->GetStaticMethodID(xresourcesClass, "translateResId",
-        //                                                   "(ILandroid/content/res/XResources;Landroid/content/res/Resources;)I");
-        // if (xresourcesTranslateResId == NULL) {
-        //     ALOGE("ERROR: could not find method %s.translateResId(int, Resources, Resources)\n", XRESOURCES_CLASS);
-        //     env->ExceptionClear();
-        //     return false;
-        // }
-
-        // xresourcesTranslateAttrId = env->GetStaticMethodID(xresourcesClass, "translateAttrId",
-        //                                                    "(Ljava/lang/String;Landroid/content/res/XResources;)I");
-        // if (xresourcesTranslateAttrId == NULL) {
-        //     ALOGE("ERROR: could not find method %s.findAttrId(String, Resources, Resources)\n", XRESOURCES_CLASS);
-        //     env->ExceptionClear();
-        //     return false;
-        // }
-
         return true;
     }
 
@@ -266,11 +219,21 @@ namespace android {
         LOG(ERROR) << "xposed: hookMethodNative for " << art::PrettyMethod(method);
         
         XposedHookInfo* hookInfo = (XposedHookInfo*) calloc(1, sizeof(XposedHookInfo));
-        // hookInfo->reflectedMethod = soa.Decode<Object*>(env->NewGlobalRef(javaMethod));
-        // hookInfo->additionalInfo = soa.Decode<Object*> (env->NewGlobalRef(additionalInfoIndirect));
 
         hookInfo->reflectedMethod = env->NewGlobalRef(javaMethod);
         hookInfo->additionalInfo = env->NewGlobalRef(additionalInfoIndirect);
+        
+        ArtMethod* original_art_method=(ArtMethod*)malloc(sizeof(ArtMethod));
+        memcpy(original_art_method, method, sizeof(ArtMethod));
+
+        jobject reflect_method;
+        if (original_art_method->IsConstructor()) {
+            reflect_method = env->AllocObject(WellKnownClasses::java_lang_reflect_Constructor);
+        } else {
+            reflect_method = env->AllocObject(WellKnownClasses::java_lang_reflect_Method);
+        }
+        soa.DecodeField(WellKnownClasses::java_lang_reflect_AbstractMethod_artMethod)->SetObject<false>(soa.Decode<Object*>(reflect_method), original_art_method);
+        hookInfo->original_method = env->NewGlobalRef(reflect_method);
 
         ALOGE("xposed: hookInfo: %p, %p", soa.Decode<Object*> (hookInfo->reflectedMethod), soa.Decode<Object*> (hookInfo->additionalInfo));
         
@@ -284,25 +247,13 @@ namespace android {
         return (method->GetEntryPointFromQuickCompiledCode()) == (void *)xposedCallHandler;
     }
 
-    // fixme
-    // static void de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative(const u4* args, JValue* pResult,
-    //                                                                            const Method* method, ::Thread* self) {
-    //     Method* meth = (Method*) args[1];
-    //     if (meth == NULL) {
-    //         meth = dvmGetMethodFromReflectObj((Object*) args[0]);
-    //         if (xposedIsHooked(meth)) {
-    //             meth = (Method*) meth->insns;
-    //         }
-    //     }
-    //     ArrayObject* params = (ArrayObject*) args[2];
-    //     ClassObject* returnType = (ClassObject*) args[3];
-    //     Object* thisObject = (Object*) args[4]; // null for static methods
-    //     ArrayObject* argList = (ArrayObject*) args[5];
-
-    //     // invoke the method
-    //     pResult->l = dvmInvokeMethod(thisObject, meth, argList, params, returnType, true);
-    //     return;
-    // }
+    static jobject de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative (
+        JNIEnv* env, jclass clazz, jobject java_method, jobject thiz, jobject args) {
+        ScopedObjectAccess soa(env);
+        ArtMethod* method = ArtMethod::FromReflectedMethod(soa, java_method);
+        XposedHookInfo* hookInfo = (XposedHookInfo*)method->GetEntryPointFromInterpreter();
+        return InvokeMethod(soa, hookInfo->original_method, thiz, args, true);
+    }
 
     static jobject de_robv_android_xposed_XposedBridge_getStartClassName(JNIEnv* env, jclass clazz) {
         return env->NewStringUTF(startClassName);
@@ -312,6 +263,8 @@ namespace android {
         {"getStartClassName", "()Ljava/lang/String;", (void*)de_robv_android_xposed_XposedBridge_getStartClassName},
         {"initNative", "()Z", (void*)de_robv_android_xposed_XposedBridge_initNative},
         {"hookMethodNative", "(Ljava/lang/reflect/Member;Ljava/lang/Object;)V", (void*)de_robv_android_xposed_XposedBridge_hookMethodNative},
+        {"invokeOriginalMethod", "(Ljava/lang/reflect/Member;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+         (void*)de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative},
     };
 
     static int register_de_robv_android_xposed_XposedBridge(JNIEnv* env) {

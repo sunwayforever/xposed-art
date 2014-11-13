@@ -46,6 +46,7 @@ namespace android {
     struct XposedHookInfo {
         jobject reflectedMethod;
         jobject additionalInfo;
+        jobject original_method;
     };
 
     static int xposedReadIntConfig(const char* fileName, int defaultValue);

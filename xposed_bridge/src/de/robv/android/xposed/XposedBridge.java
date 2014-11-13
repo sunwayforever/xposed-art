@@ -384,7 +384,7 @@ public final class XposedBridge {
                 returnType = null;
             }
 
-            AdditionalHookInfo additionalInfo = new AdditionalHookInfo(callbacks, parameterTypes, returnType);
+            AdditionalHookInfo additionalInfo = new AdditionalHookInfo(callbacks);
             hookMethodNative(hookMethod, additionalInfo);
         }
 
@@ -577,13 +577,8 @@ public final class XposedBridge {
 
     private static class AdditionalHookInfo {
         final CopyOnWriteSortedSet<XC_MethodHook> callbacks;
-        final Class<?>[] parameterTypes;
-        final Class<?> returnType;
-
-        private AdditionalHookInfo(CopyOnWriteSortedSet<XC_MethodHook> callbacks, Class<?>[] parameterTypes, Class<?> returnType) {
+        private AdditionalHookInfo(CopyOnWriteSortedSet<XC_MethodHook> callbacks) {
             this.callbacks = callbacks;
-            this.parameterTypes = parameterTypes;
-            this.returnType = returnType;
         }
     }
 }
