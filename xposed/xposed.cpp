@@ -237,7 +237,7 @@ namespace android {
 
     extern "C" void xposed_quick_invoke_stub(ArtMethod*, uint32_t*, uint32_t, art::Thread*, const void*, JValue *);
     
-    static jobject de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative (
+    extern "C" jobject de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative (
         JNIEnv* env, jclass clazz, jobject java_method, jobject thiz, jobject args) {
         ScopedObjectAccess soa(env);
         art::Thread* self = art::Thread::Current();
@@ -252,21 +252,55 @@ namespace android {
             this_object = soa.Decode<Object*> (thiz);
         }
         const void* quick_code = Runtime::Current()->GetClassLinker()->GetQuickOatCodeFor(method);
-        
-        uint32_t arguments[3]={0};
-        arguments[0] = (uint32_t)this_object;
-        arguments[1] = 1;
-        arguments[2] = 9;
+
+        // todo: convert this_object+jobject[] to args
+        uint32_t shorty_len = 0;
+        const char * shorty = method->GetShorty(&shorty_len);
+        char return_type = *shorty;
+        shorty++;
+        shorty_len--;
+
+        uint32_t arg_array[shorty_len*2];
+        memset(arg_array, 0, sizeof(arg_array));
+        int num_bytes = 0;
+        ClassLinker* linker = Runtime::Current()->GetClassLinker();
+        if (this_object != NULL) {
+            arg_array[0] = (uint32_t)this_object;
+            num_bytes += 4;
+        }
+        ObjectArray<Object>* object_array = soa.Decode< ObjectArray<Object>* >(args);
+        for (int i=0;i<shorty_len; i++) {
+            char desc = shorty[i];
+            if (desc == 'L' || desc == '[') {
+                arg_array[num_bytes/4] = (uint32_t) (object_array->Get(i));
+                num_bytes += 4;
+            } else {
+                JValue value;
+                UnboxPrimitiveForField(object_array->Get(i), linker->FindPrimitiveClass(desc), nullptr, &value);
+                switch (desc) {
+                    case 'Z': case 'B': case 'C': case 'S': case 'I': case 'F':
+                        arg_array[num_bytes/4] = value.GetI();
+                        num_bytes += 4;
+                        break;
+                    case 'D': case 'J':
+                        uint64_t dvalue = value.GetJ();
+                        arg_array[num_bytes / 4] = dvalue;
+                        arg_array[(num_bytes / 4) + 1] = dvalue >> 32;
+                        num_bytes += 8;
+                        break;
+                }
+            }
+        }        
 
         JValue result;
+        ALOGE("xposed: xposed_quick_invoke_stub: quick_code: %p, result: %p, num_bytes: %d, arg_array: %p", quick_code, &result, num_bytes, arg_array);
+        (*xposed_quick_invoke_stub)(method, arg_array, num_bytes, self, quick_code, &result);
 
-        ALOGE("xposed: quick_code is at %p, result at: %p", quick_code, &result);
-
-        (*xposed_quick_invoke_stub)(method, arguments, 12, self, quick_code, &result);
-
-        LOG(ERROR) << "xposed: <<< invokeOriginalMethodNative returns " << result.GetI();
-
-        return nullptr;
+        if (return_type == '[' || return_type == 'L') {
+            return soa.AddLocalReference<jobject> (result.GetL());
+        } else {
+            return soa.AddLocalReference<jobject> (BoxPrimitive(Primitive::GetType(return_type), result));
+        }
     }
 
     static jobject de_robv_android_xposed_XposedBridge_getStartClassName(JNIEnv* env, jclass clazz) {

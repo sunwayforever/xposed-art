@@ -31,12 +31,14 @@ using art::WellKnownClasses;
 using art::Primitive;
 using art::BoxPrimitive;
 using art::UnboxPrimitiveForResult;
+using art::UnboxPrimitiveForField;
 using art::JValue;
 using art::ScopedObjectAccess;
 using art::StackHandleScope;
 using art::Handle;
 using art::MethodHelper;
 using art::StackReference;
+using art::ClassLinker;
 
 #define XPOSED_JAR "system/framework/XposedBridge.jar"
 #define XPOSED_CLASS "de/robv/android/xposed/XposedBridge"
@@ -54,16 +56,12 @@ namespace android {
     bool addXposedToClasspath(bool zygote);
     bool xposedOnVmCreated(JNIEnv* env, const char* className);
 
-    // fixme
     extern "C" int xposedCallHandler(ArtMethod* original, Object* here, int a, int b, int32_t sp);
-    // extern "C" void xposedCallHandler(ArtMethod* original, uint32_t* args, JValue* pResult);
-    // static void xposedCallHandler(const u4* args, JValue* pResult, const ArtMethod* method, ::Thread* self);
     static bool xposedIsHooked(ArtMethod* method);
 
     static jboolean de_robv_android_xposed_XposedBridge_initNative(JNIEnv* env, jclass clazz);
     static void de_robv_android_xposed_XposedBridge_hookMethodNative(JNIEnv* env, jclass clazz, jobject javaMethod, jobject additionalInfoIndirect);
-    // fixme
-    // static void de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative(const u4* args, JValue* pResult, const ArtMethod* method, ::Thread* self);
+
     static void android_content_res_XResources_rewriteXmlReferencesNative(JNIEnv* env, jclass clazz, jint parserPtr, jobject origRes, jobject repRes);
     static jobject de_robv_android_xposed_XposedBridge_getStartClassName(JNIEnv* env, jclass clazz);
 

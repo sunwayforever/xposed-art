@@ -150,6 +150,16 @@ public final class XposedBridge {
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     Log.e("xposed_bridge", "beforeHookedMethod 2, do nothing");
                 }
+            });
+        findAndHookMethod(ActivityThread.class, "hello3", Integer.TYPE, Integer.TYPE, Integer.TYPE, Integer.TYPE,new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    Log.e("xposed_bridge", "beforeHookedMethod 3, do nothing");
+                }
+            });
+        findAndHookMethod(ActivityThread.class, "hello4", String.class, String.class, new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    Log.e("xposed_bridge", "beforeHookedMethod 4, do nothing");
+                }
             });        
         // findAndHookMethod(ActivityThread.class, "handleBindApplication", "android.app.ActivityThread.AppBindData", new XC_MethodHook() {
         //         protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
