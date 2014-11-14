@@ -223,20 +223,6 @@ namespace android {
         hookInfo->reflectedMethod = env->NewGlobalRef(javaMethod);
         hookInfo->additionalInfo = env->NewGlobalRef(additionalInfoIndirect);
         
-        ArtMethod* original_art_method=(ArtMethod*)malloc(sizeof(ArtMethod));
-        memcpy(original_art_method, method, sizeof(ArtMethod));
-
-        jobject reflect_method;
-        if (original_art_method->IsConstructor()) {
-            reflect_method = env->AllocObject(WellKnownClasses::java_lang_reflect_Constructor);
-        } else {
-            reflect_method = env->AllocObject(WellKnownClasses::java_lang_reflect_Method);
-        }
-        soa.DecodeField(WellKnownClasses::java_lang_reflect_AbstractMethod_artMethod)->SetObject<false>(soa.Decode<Object*>(reflect_method), original_art_method);
-        hookInfo->original_method = env->NewGlobalRef(reflect_method);
-
-        ALOGE("xposed: hookInfo: %p, %p", soa.Decode<Object*> (hookInfo->reflectedMethod), soa.Decode<Object*> (hookInfo->additionalInfo));
-        
         method->SetEntryPointFromQuickCompiledCode((void*)&xposedCallHandler);
         method->SetEntryPointFromInterpreter((art::mirror::EntryPointFromInterpreter*) hookInfo);
 
@@ -247,12 +233,40 @@ namespace android {
         return (method->GetEntryPointFromQuickCompiledCode()) == (void *)xposedCallHandler;
     }
 
+    typedef int64_t (*QUICK_CODE_FUNC)(int32_t, int32_t, int32_t, int32_t);
+
+    extern "C" void xposed_quick_invoke_stub(ArtMethod*, uint32_t*, uint32_t, art::Thread*, const void*, JValue *);
+    
     static jobject de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative (
         JNIEnv* env, jclass clazz, jobject java_method, jobject thiz, jobject args) {
         ScopedObjectAccess soa(env);
+        art::Thread* self = art::Thread::Current();
+
+        LOG(ERROR) << "xposed: >>> invokeOriginalMethodNative";
+        
         ArtMethod* method = ArtMethod::FromReflectedMethod(soa, java_method);
         XposedHookInfo* hookInfo = (XposedHookInfo*)method->GetEntryPointFromInterpreter();
-        return InvokeMethod(soa, hookInfo->original_method, thiz, args, true);
+
+        Object* this_object = NULL;
+        if (! method->IsStatic()) {
+            this_object = soa.Decode<Object*> (thiz);
+        }
+        const void* quick_code = Runtime::Current()->GetClassLinker()->GetQuickOatCodeFor(method);
+        
+        uint32_t arguments[3]={0};
+        arguments[0] = (uint32_t)this_object;
+        arguments[1] = 1;
+        arguments[2] = 9;
+
+        JValue result;
+
+        ALOGE("xposed: quick_code is at %p, result at: %p", quick_code, &result);
+
+        (*xposed_quick_invoke_stub)(method, arguments, 12, self, quick_code, &result);
+
+        LOG(ERROR) << "xposed: <<< invokeOriginalMethodNative returns " << result.GetI();
+
+        return nullptr;
     }
 
     static jobject de_robv_android_xposed_XposedBridge_getStartClassName(JNIEnv* env, jclass clazz) {

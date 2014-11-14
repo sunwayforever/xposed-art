@@ -2,7 +2,8 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-	xposed.cpp
+	xposed.cpp \
+	xposed_quick_code_stub.S
 
 LOCAL_CFLAGS += -std=c++0x
 LOCAL_C_INCLUDES := \
