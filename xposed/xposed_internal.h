@@ -56,7 +56,7 @@ namespace android {
     bool addXposedToClasspath(bool zygote);
     bool xposedOnVmCreated(JNIEnv* env, const char* className);
 
-    extern "C" int xposedCallHandler(ArtMethod* original, Object* here, int a, int b, int32_t sp);
+    extern "C" int64_t xposedCallHandler(ArtMethod* original, Object* here, int a, int b, int32_t sp);
     static bool xposedIsHooked(ArtMethod* method);
 
     static jboolean de_robv_android_xposed_XposedBridge_initNative(JNIEnv* env, jclass clazz);

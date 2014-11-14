@@ -160,38 +160,46 @@ public final class XposedBridge {
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     Log.e("xposed_bridge", "beforeHookedMethod 4, do nothing");
                 }
-            });        
-        // findAndHookMethod(ActivityThread.class, "handleBindApplication", "android.app.ActivityThread.AppBindData", new XC_MethodHook() {
-        //         protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-        //             ActivityThread activityThread = (ActivityThread) param.thisObject;
-        //             ApplicationInfo appInfo = (ApplicationInfo) getObjectField(param.args[0], "appInfo");
-        //             ComponentName instrumentationName = (ComponentName) getObjectField(param.args[0], "instrumentationName");
-        //             if (instrumentationName != null) {
-        //                 XposedBridge.log("Instrumentation detected, disabling framework for " + appInfo.packageName);
-        //                 disableHooks = true;
-        //                 return;
-        //             }
-        //             CompatibilityInfo compatInfo = (CompatibilityInfo) getObjectField(param.args[0], "compatInfo");
-        //             if (appInfo.sourceDir == null)
-        //                 return;
+            });
+        findAndHookMethod(ActivityThread.class, "hello5", String.class, String.class, new XC_MethodHook() {
+            protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                Log.e("xposed_bridge", "beforeHookedMethod 5, do nothing");
+                new Throwable().fillInStackTrace();
+            }
+        });
+        /*
+        findAndHookMethod(ActivityThread.class, "handleBindApplication", "android.app.ActivityThread.AppBindData", new XC_MethodHook() {
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    ActivityThread activityThread = (ActivityThread) param.thisObject;
+                    ApplicationInfo appInfo = (ApplicationInfo) getObjectField(param.args[0], "appInfo");
+                    ComponentName instrumentationName = (ComponentName) getObjectField(param.args[0], "instrumentationName");
+                    if (instrumentationName != null) {
+                        XposedBridge.log("Instrumentation detected, disabling framework for " + appInfo.packageName);
+                        return;
+                    }
+                    CompatibilityInfo compatInfo = (CompatibilityInfo) getObjectField(param.args[0], "compatInfo");
+                    if (appInfo.sourceDir == null)
+                        return;
 
-        //             setObjectField(activityThread, "mBoundApplication", param.args[0]);
-        //             loadedPackagesInProcess.add(appInfo.packageName);
-        //             LoadedApk loadedApk = activityThread.getPackageInfoNoCheck(appInfo, compatInfo);
-        //             // XResources.setPackageNameForResDir(appInfo.packageName, loadedApk.getResDir());
+                    setObjectField(activityThread, "mBoundApplication", param.args[0]);
+                    loadedPackagesInProcess.add(appInfo.packageName);
+                    LoadedApk loadedApk = activityThread.getPackageInfoNoCheck(appInfo, compatInfo);
+                    // XResources.setPackageNameForResDir(appInfo.packageName, loadedApk.getResDir());
 
-        //             LoadPackageParam lpparam = new LoadPackageParam(sLoadedPackageCallbacks);
-        //             lpparam.packageName = appInfo.packageName;
-        //             lpparam.processName = (String) getObjectField(param.args[0], "processName");
-        //             lpparam.classLoader = loadedApk.getClassLoader();
-        //             lpparam.appInfo = appInfo;
-        //             lpparam.isFirstApplication = true;
-        //             XC_LoadPackage.callAll(lpparam);
+                    LoadPackageParam lpparam = new LoadPackageParam(sLoadedPackageCallbacks);
+                    lpparam.packageName = appInfo.packageName;
+                    lpparam.processName = (String) getObjectField(param.args[0], "processName");
+                    lpparam.classLoader = loadedApk.getClassLoader();
+                    lpparam.appInfo = appInfo;
+                    lpparam.isFirstApplication = true;
+                    XC_LoadPackage.callAll(lpparam);
 
-        //             if (appInfo.packageName.equals(INSTALLER_PACKAGE_NAME))
-        //                 hookXposedInstaller(lpparam.classLoader);
-        //         }
-        //     });
+                    if (appInfo.packageName.equals(INSTALLER_PACKAGE_NAME))
+                        hookXposedInstaller(lpparam.classLoader);
+                }
+            });
+        */
+
 
         // system thread initialization
         // findAndHookMethod("com.android.server.ServerThread", null,
@@ -447,13 +455,15 @@ public final class XposedBridge {
         for (Object o: args) {
             Log.e("xposed_bridge", "args:"+o);
         }
-
+        Log.e("xposed_bridge","handleHookedMethod 1");
         Object[] callbacksSnapshot = additionalInfo.callbacks.getSnapshot();
         final int callbacksLength = callbacksSnapshot.length;
         if (callbacksLength == 0) {
+            Log.e("xposed_bridge"," handleHookedMethod 2");
             return invokeOriginalMethod(method, thisObject, args);
         }
 
+        Log.e("xposed_bridge","handleHookedMethod 3");
         MethodHookParam param = new MethodHookParam();
         param.method = method;
         param.thisObject = thisObject;
@@ -463,6 +473,7 @@ public final class XposedBridge {
         int beforeIdx = 0;
         do {
             try {
+                Log.e("xposed_bridge","handleHookedMethod 4");
                 ((XC_MethodHook) callbacksSnapshot[beforeIdx]).beforeHookedMethod(param);
             } catch (Throwable t) {
                 XposedBridge.log(t);
@@ -480,7 +491,9 @@ public final class XposedBridge {
             }
         } while (++beforeIdx < callbacksLength);
 
+        Log.e("xposed_bridge","handleHookedMethod 5");
         if (!param.returnEarly) {
+            Log.e("xposed_bridge","handleHookedMethod 6");
             param.setResult(invokeOriginalMethod(method, param.thisObject, param.args));
         }
 
@@ -490,6 +503,7 @@ public final class XposedBridge {
             Throwable lastThrowable = param.getThrowable();
 
             try {
+                Log.e("xposed_bridge","handleHookedMethod 7");
                 ((XC_MethodHook) callbacksSnapshot[afterIdx]).afterHookedMethod(param);
             } catch (Throwable t) {
                 XposedBridge.log(t);
@@ -502,10 +516,12 @@ public final class XposedBridge {
             }
         } while (--afterIdx >= 0);
 
+        Log.e("xposed_bridge","handleHookedMethod 8");
         // // return
         if (param.hasThrowable()) {
             throw param.getThrowable();
         } else {
+            Log.e("xposed_bridge","handleHookedMethod 9");
             return param.getResult();
         }
     }

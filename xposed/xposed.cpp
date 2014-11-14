@@ -70,7 +70,7 @@ namespace android {
         return true;
     }
 
-    int xposedCallHandler(ArtMethod* original_method, Object* thiz, int r1, int r2, int32_t sp) {
+    int64_t xposedCallHandler(ArtMethod* original_method, Object* thiz, int r1, int r2, int32_t sp) {
         LOG(ERROR) << "xposed: >>> xposedCallHandler for " << art::PrettyMethod(original_method);
         art::Thread* self = art::Thread::Current();
         ScopedObjectAccess soa(self);
@@ -148,51 +148,27 @@ namespace android {
         LOG(ERROR) << "xposed: after InvokeXposedWithVarArgs";
 
         // need check exception
-        if (return_type == 'L' || return_type == '[') {
-            return (long)ret_value.GetL();
+
+        if (return_type == 'V') {
+            return 0;
         }
-        
-        StackHandleScope<1> hs(self);
-        MethodHelper mh_interface_method(hs.NewHandle(original_method));
-        art::ThrowLocation throw_location;
-        UnboxPrimitiveForResult(throw_location, ret_value.GetL(), mh_interface_method.GetReturnType(), &ret_value);
-            
-        long ret=0;
-        switch (return_type) {
-            case 'Z':
-                ret=(long)ret_value.GetZ();
-                break;
-            case 'C':
-                ret=(long)ret_value.GetC();
-                break;
-            case 'F':
-                ret=(long)ret_value.GetC();
-                break;
-            case 'B':
-                ret=(long)ret_value.GetB();
-                break;
-            case 'S':
-                ret=(long)ret_value.GetS();
-                break;
-            case 'I':
-                ret=(long)ret_value.GetI();
-                break;
-            case 'D':
-                ret=(long)ret_value.GetD();
-                break;
-            case 'J': 
-                ret=(long)ret_value.GetJ();
-                break;
-            default:
-                break;
-        }        
-        ALOGE("xposed: <<<xposedCallHandler: ret is %ld", ret);
-        return ret;
+
+        if (return_type != 'L' || return_type != '[') {
+            StackHandleScope<1> hs(self);
+            MethodHelper mh_interface_method(hs.NewHandle(original_method));
+            art::ThrowLocation throw_location;
+            UnboxPrimitiveForResult(throw_location, ret_value.GetL(), mh_interface_method.GetReturnType(), &ret_value);
+        }
+
+        return ret_value.GetJ();
     }
 
     static jboolean de_robv_android_xposed_XposedBridge_initNative(JNIEnv* env, jclass clazz) {
-        xposedHandleHookedMethod = (ArtMethod*) env->GetStaticMethodID(xposedClass, "handleHookedMethod",
-                                                                      "(Ljava/lang/reflect/Member;Ljava/lang/Object;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
+        xposedHandleHookedMethod = (ArtMethod*) env->GetStaticMethodID(
+            xposedClass,
+            "handleHookedMethod",
+            "(Ljava/lang/reflect/Member;Ljava/lang/Object;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
+        
         if (xposedHandleHookedMethod == NULL) {
             ALOGE("ERROR: could not find method %s.handleHookedMethod(Member, Object, Object, Object[])\n", XPOSED_CLASS);
             env->ExceptionClear();
@@ -233,8 +209,6 @@ namespace android {
         return (method->GetEntryPointFromQuickCompiledCode()) == (void *)xposedCallHandler;
     }
 
-    typedef int64_t (*QUICK_CODE_FUNC)(int32_t, int32_t, int32_t, int32_t);
-
     extern "C" void xposed_quick_invoke_stub(ArtMethod*, uint32_t*, uint32_t, art::Thread*, const void*, JValue *);
     
     extern "C" jobject de_robv_android_xposed_XposedBridge_invokeOriginalMethodNative (
@@ -260,7 +234,7 @@ namespace android {
         shorty++;
         shorty_len--;
 
-        uint32_t arg_array[shorty_len*2];
+        uint32_t* arg_array = (uint32_t*) malloc(shorty_len*2*sizeof(uint32_t));
         memset(arg_array, 0, sizeof(arg_array));
         int num_bytes = 0;
         ClassLinker* linker = Runtime::Current()->GetClassLinker();
@@ -295,7 +269,8 @@ namespace android {
         JValue result;
         ALOGE("xposed: xposed_quick_invoke_stub: quick_code: %p, result: %p, num_bytes: %d, arg_array: %p", quick_code, &result, num_bytes, arg_array);
         (*xposed_quick_invoke_stub)(method, arg_array, num_bytes, self, quick_code, &result);
-
+        free(arg_array);
+        
         if (return_type == '[' || return_type == 'L') {
             return soa.AddLocalReference<jobject> (result.GetL());
         } else {
