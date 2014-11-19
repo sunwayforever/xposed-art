@@ -164,7 +164,8 @@ public final class XposedBridge {
         findAndHookMethod(ActivityThread.class, "hello5", String.class, String.class, new XC_MethodHook() {
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                 Log.e("xposed_bridge", "beforeHookedMethod 5, do nothing");
-                new Throwable().fillInStackTrace();
+                Thread.dumpStack();
+                // new Throwable().fillInStackTrace();
             }
         });
         /*

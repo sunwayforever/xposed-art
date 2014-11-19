@@ -75,6 +75,12 @@ namespace android {
         art::Thread* self = art::Thread::Current();
         ScopedObjectAccess soa(self);
 
+        int __sp = 0;
+        __asm__(
+            "sub sp, #4\n\t"                    \
+            "mov %0, sp\n\t"                    \
+            :"=r" (__sp));
+    
         Object* this_object = nullptr;
         if (! original_method->IsStatic()) {
             this_object = thiz;
@@ -144,12 +150,22 @@ namespace android {
         arguments[3]=(uint32_t)args_array;
 
         JValue ret_value;
+
+        StackReference<ArtMethod>* stack_ref = (StackReference<ArtMethod>* )__sp;
+        stack_ref->Assign(original_method);
+        ((art::ManagedStack*)self->GetManagedStack())->SetTopQuickFrame(stack_ref);
+        original_method->SetNativeMethod((void*)0xff);
+
         xposedHandleHookedMethod->Invoke(self, arguments, 16, &ret_value, xposedHandleHookedMethod->GetShorty());
         LOG(ERROR) << "xposed: after InvokeXposedWithVarArgs";
 
         // need check exception
 
         if (return_type == 'V') {
+            __asm__(
+                "add sp, #4\n\t"                    \
+                :);
+
             return 0;
         }
 
@@ -159,6 +175,10 @@ namespace android {
             art::ThrowLocation throw_location;
             UnboxPrimitiveForResult(throw_location, ret_value.GetL(), mh_interface_method.GetReturnType(), &ret_value);
         }
+
+        __asm__(
+            "add sp, #4\n\t"                    \
+            :);
 
         return ret_value.GetJ();
     }
@@ -201,6 +221,7 @@ namespace android {
         
         method->SetEntryPointFromQuickCompiledCode((void*)&xposedCallHandler);
         method->SetEntryPointFromInterpreter((art::mirror::EntryPointFromInterpreter*) hookInfo);
+        method->SetNativeMethod((void*)0xff);
 
         ALOGE("xposed: <<<de_robv_android_xposed_XposedBridge_hookMethodNative");
     }
@@ -266,11 +287,16 @@ namespace android {
             }
         }        
 
+        StackReference<ArtMethod>* stack_ref = ((art::ManagedStack*)self->GetManagedStack())->GetTopQuickFrame();
+
         JValue result;
         ALOGE("xposed: xposed_quick_invoke_stub: quick_code: %p, result: %p, num_bytes: %d, arg_array: %p", quick_code, &result, num_bytes, arg_array);
+        // b external/xposed-art/xposed/xposed.cpp:292
         (*xposed_quick_invoke_stub)(method, arg_array, num_bytes, self, quick_code, &result);
         free(arg_array);
-        
+
+        ((art::ManagedStack*)self->GetManagedStack())->SetTopQuickFrame(stack_ref);
+
         if (return_type == '[' || return_type == 'L') {
             return soa.AddLocalReference<jobject> (result.GetL());
         } else {

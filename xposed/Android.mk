@@ -5,7 +5,7 @@ LOCAL_SRC_FILES := \
 	xposed.cpp \
 	xposed_quick_code_stub.S
 
-LOCAL_CFLAGS += -std=c++0x
+LOCAL_CFLAGS += -std=c++0x -O0
 LOCAL_C_INCLUDES := \
 	$(JNI_H_INCLUDE) \
 	art/runtime/ \
