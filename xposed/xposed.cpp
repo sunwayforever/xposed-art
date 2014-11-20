@@ -20,7 +20,7 @@
 #include "xposed_offsets.h"
 namespace android {
     Class* objectArrayClass = NULL;
-    jclass xposedClass = NULL;
+    jclass xposed_class = NULL;
     ArtMethod* xposedHandleHookedMethod = NULL;
     const char* startClassName = NULL;
     void* PTR_gDvmJit = NULL;
@@ -52,10 +52,10 @@ namespace android {
         ALOGE("xposed: xposedOnVmCreated: className: %s", className);
         startClassName = className;
 
-        xposedClass = env->FindClass(XPOSED_CLASS);
-        xposedClass = reinterpret_cast<jclass>(env->NewGlobalRef(xposedClass));
+        xposed_class = env->FindClass(XPOSED_CLASS);
+        xposed_class = reinterpret_cast<jclass>(env->NewGlobalRef(xposed_class));
     
-        if (xposedClass == NULL) {
+        if (xposed_class == NULL) {
             ALOGE("xposed: Error while loading Xposed class '%s':\n", XPOSED_CLASS);
             env->ExceptionClear();
             return false;
@@ -75,12 +75,17 @@ namespace android {
         art::Thread* self = art::Thread::Current();
         ScopedObjectAccess soa(self);
 
+        // NOTE: the frame size of xposedCallHandler is 492 when
+        // compiled with gcc flag -O0, actually the 492 is computed
+        // using `(int)&sp - __sp`
+        
         int __sp = 0;
         __asm__(
             "sub sp, #4\n\t"                    \
             "mov %0, sp\n\t"                    \
             :"=r" (__sp));
-    
+
+        ALOGE("xposedCallHandler: frame size is %d", (int) &sp - __sp);
         Object* this_object = nullptr;
         if (! original_method->IsStatic()) {
             this_object = thiz;
@@ -132,7 +137,6 @@ namespace android {
                 }
                 case '[':case 'L':
                     obj  = (Object*) args[i];
-                    ALOGE("get object for arg: class is %s", obj->GetClass()->GetName()->ToModifiedUtf8().c_str());
                     break;
                 default:
                     ALOGE("xposed: Unknown method signature description character: %c\n", desc);
@@ -185,7 +189,7 @@ namespace android {
 
     static jboolean de_robv_android_xposed_XposedBridge_initNative(JNIEnv* env, jclass clazz) {
         xposedHandleHookedMethod = (ArtMethod*) env->GetStaticMethodID(
-            xposedClass,
+            xposed_class,
             "handleHookedMethod",
             "(Ljava/lang/reflect/Member;Ljava/lang/Object;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
         
@@ -197,6 +201,7 @@ namespace android {
         return true;
     }
 
+    ArtMethod* backup_method = 0;
     static void de_robv_android_xposed_XposedBridge_hookMethodNative(JNIEnv* env, jclass clazz, jobject javaMethod, jobject additionalInfoIndirect) {
         ALOGE("xposed: >>>de_robv_android_xposed_XposedBridge_hookMethodNative");
         ScopedObjectAccess soa(env);
@@ -218,7 +223,7 @@ namespace android {
 
         hookInfo->reflectedMethod = env->NewGlobalRef(javaMethod);
         hookInfo->additionalInfo = env->NewGlobalRef(additionalInfoIndirect);
-        
+
         method->SetEntryPointFromQuickCompiledCode((void*)&xposedCallHandler);
         method->SetEntryPointFromInterpreter((art::mirror::EntryPointFromInterpreter*) hookInfo);
         method->SetNativeMethod((void*)0xff);
@@ -237,6 +242,12 @@ namespace android {
         ScopedObjectAccess soa(env);
         art::Thread* self = art::Thread::Current();
 
+        // jmethodID invoke_original_method_id = env->GetMethodID(
+        //     xposed_class, "invokeOriginalMethod",
+        //     "(Ljava/lang/reflect/Member;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
+
+        // ArtMethod* invoke_original_method =  soa.DecodeMethod(invoke_original_method_id);
+            
         LOG(ERROR) << "xposed: >>> invokeOriginalMethodNative";
         
         ArtMethod* method = ArtMethod::FromReflectedMethod(soa, java_method);
@@ -287,15 +298,26 @@ namespace android {
             }
         }        
 
-        StackReference<ArtMethod>* stack_ref = ((art::ManagedStack*)self->GetManagedStack())->GetTopQuickFrame();
+        // StackReference<ArtMethod>* stack_ref = ((art::ManagedStack*)self->GetManagedStack())->GetTopQuickFrame();
 
         JValue result;
         ALOGE("xposed: xposed_quick_invoke_stub: quick_code: %p, result: %p, num_bytes: %d, arg_array: %p", quick_code, &result, num_bytes, arg_array);
-        // b external/xposed-art/xposed/xposed.cpp:292
-        (*xposed_quick_invoke_stub)(method, arg_array, num_bytes, self, quick_code, &result);
+        // b external/xposed-art/xposed/xposed.cpp:315
+        backup_method = Runtime::Current()->GetClassLinker()->AllocArtMethod(self);
+        backup_method->SetDexMethodIndex(method->GetDexMethodIndex());
+        backup_method->SetDeclaringClass(method->GetDeclaringClass());
+        backup_method->SetCodeItemOffset(method->GetCodeItemOffset());
+        backup_method->SetDexCacheStrings(method->GetDeclaringClass()->GetDexCache()->GetStrings());
+        backup_method->SetDexCacheResolvedMethods(method->GetDeclaringClass()->GetDexCache()->GetResolvedMethods());
+        backup_method->SetDexCacheResolvedTypes(method->GetDeclaringClass()->GetDexCache()->GetResolvedTypes());
+        backup_method->SetEntryPointFromQuickCompiledCode(quick_code);
+        backup_method->SetAccessFlags(method->GetAccessFlags());
+
+        ALOGE("xposed: backup_method is at %p", backup_method);
+        (*xposed_quick_invoke_stub)(backup_method, arg_array, num_bytes, self, quick_code, &result);
         free(arg_array);
 
-        ((art::ManagedStack*)self->GetManagedStack())->SetTopQuickFrame(stack_ref);
+        // ((art::ManagedStack*)self->GetManagedStack())->SetTopQuickFrame(stack_ref);
 
         if (return_type == '[' || return_type == 'L') {
             return soa.AddLocalReference<jobject> (result.GetL());
@@ -317,7 +339,7 @@ namespace android {
     };
 
     static int register_de_robv_android_xposed_XposedBridge(JNIEnv* env) {
-        return env->RegisterNatives(xposedClass, xposedMethods, sizeof(xposedMethods)/sizeof(xposedMethods[0]));
+        return env->RegisterNatives(xposed_class, xposedMethods, sizeof(xposedMethods)/sizeof(xposedMethods[0]));
     }
 
 }

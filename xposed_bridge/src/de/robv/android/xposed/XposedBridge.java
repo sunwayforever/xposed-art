@@ -168,9 +168,10 @@ public final class XposedBridge {
                 // new Throwable().fillInStackTrace();
             }
         });
-        /*
+
         findAndHookMethod(ActivityThread.class, "handleBindApplication", "android.app.ActivityThread.AppBindData", new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    Log.e("xposed_bridge", "before handleBindApplication");
                     ActivityThread activityThread = (ActivityThread) param.thisObject;
                     ApplicationInfo appInfo = (ApplicationInfo) getObjectField(param.args[0], "appInfo");
                     ComponentName instrumentationName = (ComponentName) getObjectField(param.args[0], "instrumentationName");
@@ -199,7 +200,7 @@ public final class XposedBridge {
                         hookXposedInstaller(lpparam.classLoader);
                 }
             });
-        */
+
 
 
         // system thread initialization
