@@ -1,0 +1,22 @@
+diff --git a/runtime/stack.cc b/runtime/stack.cc
+index 2d0060e..4bcef7e 100644
+--- a/runtime/stack.cc
++++ b/runtime/stack.cc
+@@ -537,7 +537,16 @@ void StackVisitor::WalkStack(bool include_transitions) {
+         if (context_ != NULL) {
+           context_->FillCalleeSaves(*this);
+         }
+-        size_t frame_size = method->GetFrameSizeInBytes();
++
++        size_t frame_size = 0;
++        uint32_t xposed_flag = (uint64_t)method->GetNativeMethod() & 0xffffffff;
++        if (! method->IsNative () && ((xposed_flag & 0xffff0000) == 0xdead0000)) {
++            ALOGE("xposed_flag is %x", xposed_flag);
++            frame_size = xposed_flag & 0x0000ffff;
++        } else {
++            frame_size = method->GetFrameSizeInBytes();
++        }
++
+         // Compute PC for next stack frame from return PC.
+         size_t return_pc_offset = method->GetReturnPcOffsetInBytes(frame_size);
+         byte* return_pc_addr = reinterpret_cast<byte*>(cur_quick_frame_) + return_pc_offset;
