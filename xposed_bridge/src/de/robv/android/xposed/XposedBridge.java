@@ -169,6 +169,7 @@ public final class XposedBridge {
             }
         });
 
+        
         findAndHookMethod(ActivityThread.class, "handleBindApplication", "android.app.ActivityThread.AppBindData", new XC_MethodHook() {
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     Log.e("xposed_bridge", "before handleBindApplication");

@@ -75,8 +75,8 @@ namespace android {
         art::Thread* self = art::Thread::Current();
         ScopedObjectAccess soa(self);
 
-        // NOTE: the frame size of xposedCallHandler is 492 when
-        // compiled with gcc flag -O0, actually the 492 is computed
+        // NOTE: the frame size of xposedCallHandler is 404 when
+        // compiled with gcc flag -O0, actually the 404 is computed
         // using `(int)&sp - __sp`
         
         int __sp = 0;
@@ -129,7 +129,7 @@ namespace android {
                     obj = BoxPrimitive(Primitive::GetType(desc), value);
                     break;
                 case 'D': case 'J': {
-                    long j;
+                    int64_t j;
                     memcpy(&j, &args[i++], sizeof(j));
                     value.SetJ(j);
                     obj = BoxPrimitive(Primitive::Type::kPrimLong, value);
