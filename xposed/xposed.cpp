@@ -158,7 +158,10 @@ namespace android {
         StackReference<ArtMethod>* stack_ref = (StackReference<ArtMethod>* )__sp;
         stack_ref->Assign(original_method);
         ((art::ManagedStack*)self->GetManagedStack())->SetTopQuickFrame(stack_ref);
-        original_method->SetNativeMethod((void*)0xff);
+
+        int32_t xposed_flag = ((int)&sp - __sp) | 0xdead0000;
+        original_method->SetNativeMethod((void*)xposed_flag);
+        ALOGE("xposed: set xposed_flag to %x", xposed_flag);
 
         xposedHandleHookedMethod->Invoke(self, arguments, 16, &ret_value, xposedHandleHookedMethod->GetShorty());
         LOG(ERROR) << "xposed: after InvokeXposedWithVarArgs";
