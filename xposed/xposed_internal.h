@@ -49,6 +49,7 @@ namespace android {
         jobject reflectedMethod;
         jobject additionalInfo;
         jobject original_method;
+        ArtMethod* original_art_method;
     };
 
     static int xposedReadIntConfig(const char* fileName, int defaultValue);

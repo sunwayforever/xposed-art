@@ -1,9 +1,3 @@
-/*
- * Xposed enables "god mode" for developers
- */
-
-#define LOG_TAG "Xposed"
-
 #include "xposed_internal.h"
 
 #include <utils/Log.h>
@@ -74,10 +68,6 @@ namespace android {
         LOG(ERROR) << "xposed: >>> xposedCallHandler for " << art::PrettyMethod(original_method);
         art::Thread* self = art::Thread::Current();
         ScopedObjectAccess soa(self);
-
-        // NOTE: the frame size of xposedCallHandler is 404 when
-        // compiled with gcc flag -O0, actually the 404 is computed
-        // using `(int)&sp - __sp`
         
         int __sp = 0;
         __asm__(
@@ -86,6 +76,7 @@ namespace android {
             :"=r" (__sp));
 
         ALOGE("xposedCallHandler: frame size is %d", (int) &sp - __sp);
+        
         Object* this_object = nullptr;
         if (! original_method->IsStatic()) {
             this_object = thiz;
@@ -227,9 +218,12 @@ namespace android {
         hookInfo->reflectedMethod = env->NewGlobalRef(javaMethod);
         hookInfo->additionalInfo = env->NewGlobalRef(additionalInfoIndirect);
 
+        
+        ArtMethod* original_art_method = Runtime::Current()->GetClassLinker()->AllocArtMethod(self);
+        hookInfo->original_art_method = original_art_method;
+
         method->SetEntryPointFromQuickCompiledCode((void*)&xposedCallHandler);
         method->SetEntryPointFromInterpreter((art::mirror::EntryPointFromInterpreter*) hookInfo);
-        method->SetNativeMethod((void*)0xff);
 
         ALOGE("xposed: <<<de_robv_android_xposed_XposedBridge_hookMethodNative");
     }
@@ -244,25 +238,18 @@ namespace android {
         JNIEnv* env, jclass clazz, jobject java_method, jobject thiz, jobject args) {
         ScopedObjectAccess soa(env);
         art::Thread* self = art::Thread::Current();
-
-        // jmethodID invoke_original_method_id = env->GetMethodID(
-        //     xposed_class, "invokeOriginalMethod",
-        //     "(Ljava/lang/reflect/Member;Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
-
-        // ArtMethod* invoke_original_method =  soa.DecodeMethod(invoke_original_method_id);
             
         LOG(ERROR) << "xposed: >>> invokeOriginalMethodNative";
         
         ArtMethod* method = ArtMethod::FromReflectedMethod(soa, java_method);
         XposedHookInfo* hookInfo = (XposedHookInfo*)method->GetEntryPointFromInterpreter();
+        ArtMethod* original_art_method = hookInfo->original_art_method;
 
         Object* this_object = NULL;
         if (! method->IsStatic()) {
             this_object = soa.Decode<Object*> (thiz);
         }
-        const void* quick_code = Runtime::Current()->GetClassLinker()->GetQuickOatCodeFor(method);
 
-        // todo: convert this_object+jobject[] to args
         uint32_t shorty_len = 0;
         const char * shorty = method->GetShorty(&shorty_len);
         char return_type = *shorty;
@@ -301,26 +288,21 @@ namespace android {
             }
         }        
 
-        // StackReference<ArtMethod>* stack_ref = ((art::ManagedStack*)self->GetManagedStack())->GetTopQuickFrame();
+        const void* quick_code = Runtime::Current()->GetClassLinker()->GetQuickOatCodeFor(method);
 
         JValue result;
         ALOGE("xposed: xposed_quick_invoke_stub: quick_code: %p, result: %p, num_bytes: %d, arg_array: %p", quick_code, &result, num_bytes, arg_array);
-        // b external/xposed-art/xposed/xposed.cpp:315
-        backup_method = Runtime::Current()->GetClassLinker()->AllocArtMethod(self);
-        backup_method->SetDexMethodIndex(method->GetDexMethodIndex());
-        backup_method->SetDeclaringClass(method->GetDeclaringClass());
-        backup_method->SetCodeItemOffset(method->GetCodeItemOffset());
-        backup_method->SetDexCacheStrings(method->GetDeclaringClass()->GetDexCache()->GetStrings());
-        backup_method->SetDexCacheResolvedMethods(method->GetDeclaringClass()->GetDexCache()->GetResolvedMethods());
-        backup_method->SetDexCacheResolvedTypes(method->GetDeclaringClass()->GetDexCache()->GetResolvedTypes());
-        backup_method->SetEntryPointFromQuickCompiledCode(quick_code);
-        backup_method->SetAccessFlags(method->GetAccessFlags());
+        original_art_method->SetDexMethodIndex(method->GetDexMethodIndex());
+        original_art_method->SetDeclaringClass(method->GetDeclaringClass());
+        original_art_method->SetCodeItemOffset(method->GetCodeItemOffset());
+        original_art_method->SetDexCacheStrings(method->GetDeclaringClass()->GetDexCache()->GetStrings());
+        original_art_method->SetDexCacheResolvedMethods(method->GetDeclaringClass()->GetDexCache()->GetResolvedMethods());
+        original_art_method->SetDexCacheResolvedTypes(method->GetDeclaringClass()->GetDexCache()->GetResolvedTypes());
+        original_art_method->SetEntryPointFromQuickCompiledCode(quick_code);
+        original_art_method->SetAccessFlags(method->GetAccessFlags());
 
-        ALOGE("xposed: backup_method is at %p", backup_method);
-        (*xposed_quick_invoke_stub)(backup_method, arg_array, num_bytes, self, quick_code, &result);
+        (*xposed_quick_invoke_stub)(original_art_method, arg_array, num_bytes, self, quick_code, &result);
         free(arg_array);
-
-        // ((art::ManagedStack*)self->GetManagedStack())->SetTopQuickFrame(stack_ref);
 
         if (return_type == '[' || return_type == 'L') {
             return soa.AddLocalReference<jobject> (result.GetL());
